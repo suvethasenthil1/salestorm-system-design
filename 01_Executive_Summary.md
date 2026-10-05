@@ -18,21 +18,25 @@ problem in distributed commerce:
 
 ## Winning Architecture in One Sentence
 
-> Redis atomic Lua script as the fast-rejection gate → SQL atomic UPDATE as the
-> durable correctness guarantee → Kafka for reliable async processing →
-> Idempotency keys at every mutation boundary → Outbox pattern for
-> payment-to-order reliability.
+> PostgreSQL conditional UPDATE as the inventory authority → Redis for safe
+> read optimization → Kafka for durable asynchronous events → idempotency at
+> mutation boundaries → Outbox/inbox patterns for payment-to-order recovery.
 
 ## Why This Architecture Wins
 
-- **Redis** absorbs 9,900 rejections in < 1ms without touching the database.
-- **SQL atomic UPDATE with `available_quantity > 0` guard** is the final, unbreakable
-  correctness layer — even if Redis drifts, the database never oversells.
+- **CDN, WAF, and admission controls** absorb cacheable traffic and shape bursts;
+  Redis may provide a conservative hint but does not grant inventory.
+- **SQL conditional UPDATE with an `available_quantity >= requested_quantity` guard**
+  is the authoritative stock decision. The affected-row count determines whether
+  a reservation can be created.
 - **Idempotency keys** prevent duplicate reservations, payments, and orders regardless
   of retries or network failures.
-- **Outbox pattern** guarantees that a successful payment always produces an order,
-  even if the Order Service is down for 30 seconds.
-- **Stateless services** allow horizontal scaling to handle 500,000 req/sec.
+- **Outbox/inbox, retries, and reconciliation** preserve payment success and let
+  order creation recover after an Order Service outage without claiming a
+  cross-service exactly-once transaction.
+- **Stateless services and edge caching** support horizontal scaling toward the
+  500,000 requests/sec design point; authoritative inventory-write capacity must
+  be load-tested and protected with admission control.
 
 ---
 
